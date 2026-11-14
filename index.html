@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Lunar South Pole Site Planner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--fg:#14171f;--mut:#667085;--line:#dfe3ec;--sun:#e8920c;--earth:#2563eb;--ok:#16a34a;--bad:#dc2626;--shade:rgba(20,23,31,.10);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b0e14;--card:#131824;--fg:#e8ebf2;--mut:#8b94a7;--line:#252c3d;--sun:#fbbf24;--earth:#60a5fa;--ok:#4ade80;--bad:#f87171;--shade:rgba(255,255,255,.07)}}
+:root[data-theme="dark"]{--bg:#0b0e14;--card:#131824;--fg:#e8ebf2;--mut:#8b94a7;--line:#252c3d;--sun:#fbbf24;--earth:#60a5fa;--ok:#4ade80;--bad:#f87171;--shade:rgba(255,255,255,.07)}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:16px 18px 4px}h1{font-size:20px;margin:0}header p{margin:2px 0 0;color:var(--mut)}
+main{display:grid;gap:12px;padding:12px 18px 24px;grid-template-columns:300px 1fr;max-width:1300px;margin:auto}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin:0 0 8px}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 3px}
+input,select,button{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px;width:100%}
+input[type=range]{padding:0}button{cursor:pointer;width:auto}button.on{background:var(--earth);color:#fff;border-color:var(--earth)}
+.row{display:flex;gap:6px}.row>*{flex:1}.stack{display:grid;gap:12px}
+canvas{width:100%;display:block}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.chip{padding:3px 9px;border-radius:99px;font-size:12px;border:1px solid var(--line)}
+.ok{color:var(--ok);border-color:var(--ok)}.bad{color:var(--bad);border-color:var(--bad)}
+.grid2{display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr)}@media(max-width:1000px){.grid2{grid-template-columns:1fr}}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:12.5px}th,td{padding:5px 7px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:nth-child(-n+2),td:nth-child(-n+2){text-align:left}tr.sel td{background:var(--shade)}tbody tr{cursor:pointer}
+.k{font-variant-numeric:tabular-nums}.small{font-size:12px;color:var(--mut)}a{color:var(--earth)}
+</style></head><body>
+<header><h1>Lunar South Pole Site Planner</h1><p>Sun &amp; Earth position vs. the local horizon: power and direct‑to‑Earth (DTE) windows, using NASA JPL Horizons data and LRO LOLA terrain, with an offline fallback engine.</p></header>
+<main>
+<div class="stack">
+ <div class="card"><h2>Site</h2>
+  <select id="site"></select>
+  <div class="row"><div><label>Lat (°, S negative)</label><input id="lat" type="number" step="0.01"></div><div><label>Lon (°E)</label><input id="lon" type="number" step="0.01"></div></div>
+  <button id="addc" style="margin-top:8px;width:100%">Use custom coordinates</button>
+  <label>Extra margin / min. antenna elevation: <b id="mv">0</b>°</label><input id="mask" type="range" min="0" max="10" step="0.1" value="0">
+ </div>
+ <div class="card"><h2>Date range (UTC)</h2>
+  <label>Start</label><input id="t0" type="datetime-local">
+  <label>Length: <b id="dv">30</b> days</label><input id="days" type="range" min="2" max="60" value="30">
+  <div class="row" style="margin-top:8px"><button id="now">Now</button><button id="live">Live</button></div>
+  <label>Cursor time</label><input id="cur" type="range" min="0" max="719" value="0"><div class="small k" id="curl"></div>
+ </div>
+<div class="card"><h2>Data source</h2><select id="src"><option value="an">Analytic engine (offline)</option><option value="jpl">NASA JPL Horizons data</option></select><div class="small" id="srcs" style="margin-top:6px">Analytic engine active.</div><div class="small" id="tms" style="margin-top:6px">Terrain: flat horizon.</div></div>
+ <div class="card small"><h2>Data &amp; method</h2>Positions use Meeus/ELP truncated lunar &amp; solar theory, with libration, from the system clock (no network needed). Accuracy ≈ 0.1–0.2°, so use it for comparing sites and planning; cross‑check final numbers with <a href="https://ssd.jpl.nasa.gov/horizons/" target="_blank" rel="noopener">NASA JPL Horizons</a> or SPICE, and terrain with LRO LOLA data. Flat‑horizon model; the mask slider approximates local terrain.</div>
+</div>
+<div class="stack">
+ <div class="card"><h2 id="ftitle">Focus site</h2>
+  <div class="grid2"><div><canvas id="sky"></canvas></div><div><canvas id="tl"></canvas><div class="small">Click the chart to move the cursor. <span style="color:var(--sun)">━ Sun</span> <span style="color:var(--earth)">━ Earth</span> ┅ mask · grey = Sun below horizon</div></div></div>
+  <div class="chips" id="chips"></div>
+ </div>
+ <div class="card"><h2>Compare sites (tick to show timelines)</h2><canvas id="rib"></canvas><div class="small">Top bar = Sun visible (amber), bottom bar = Earth visible (blue). Click a row below to focus.</div>
+  <div class="tw"><table><thead><tr><th></th><th>Site</th><th>Sun %</th><th>Earth %</th><th>Both %</th><th>Longest night</th><th>Longest comm gap</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+</div></main>
+<script>
+const R=Math.PI/180,AU=149597870.7,I=1.54242*R,SD=0.2666*R;
+const SITES=[["Shackleton rim",-89.9,0],["South Pole",-90,0],["Haworth",-87.5,-5],["de Gerlache",-88.5,-87.1],["Faustini",-87.3,77],["Malapert massif",-85.9,2.9],["Nobile",-85.2,53.3],["Amundsen",-84.5,82.8],["Cabeus",-84.9,-35.5],["Chandrayaan‑3 (Shiv Shakti)",-69.37,32.32],["Luna‑25 target",-69.5,43.5]].map(s=>({n:s[0],lat:s[1],lon:s[2]}));
+// [D,M,M',F, lon sin coef (1e-6 deg), dist cos coef (1e-3 km)]
+const LT=[[0,0,1,0,6288774,-20905355],[2,0,-1,0,1274027,-3699111],[2,0,0,0,658314,-2955968],[0,0,2,0,213618,-569925],[0,1,0,0,-185116,48888],[0,0,0,2,-114332,-3149],[2,0,-2,0,58793,246158],[2,-1,-1,0,57066,-152138],[2,0,1,0,53322,-170733],[2,-1,0,0,45758,-204586],[0,1,-1,0,-40923,-129620],[1,0,0,0,-34720,108743],[0,1,1,0,-30383,104755],[2,0,0,-2,15327,10321],[0,0,1,2,-12528,0],[0,0,1,-2,10980,79661],[4,0,-1,0,10675,-34782],[0,0,3,0,10034,-23210],[4,0,-2,0,8548,-21636],[2,1,-1,0,-7888,24208],[2,1,0,0,-6766,30824],[1,0,-1,0,-5163,-8379],[1,1,0,0,4987,-16675],[2,-1,1,0,4036,-12831],[2,0,2,0,3994,-10445],[4,0,0,0,3861,-11650],[2,0,-3,0,3665,14403]];
+const BT=[[0,0,0,1,5128122],[0,0,1,1,280602],[0,0,1,-1,277693],[2,0,0,-1,173237],[2,0,-1,1,55413],[2,0,-1,-1,46271],[2,0,0,1,32573],[0,0,2,1,17198],[2,0,1,-1,9266],[0,0,2,-1,8822],[2,-1,0,-1,8216],[2,0,-2,-1,4324],[2,0,1,1,4200]];
+const nrm=x=>x-2*Math.PI*Math.floor((x+Math.PI)/(2*Math.PI));
+function sub(v,Om,F){const l=Math.atan2(v[1],v[0]),b=Math.asin(v[2]/Math.hypot(...v)),W=l-Om;
+ const A=Math.atan2(Math.sin(W)*Math.cos(b)*Math.cos(I)-Math.sin(b)*Math.sin(I),Math.cos(W)*Math.cos(b));
+ return{l:nrm(A-F),b:Math.asin(-Math.sin(W)*Math.cos(b)*Math.sin(I)-Math.sin(b)*Math.cos(I))}}
+function frames(jd){const T=(jd-2451545)/36525;
+ const Lp=218.3164477+481267.88123421*T,D=(297.8501921+445267.1114034*T)*R,M=(357.5291092+35999.0502909*T)*R,Mp=(134.9633964+477198.8675055*T)*R,F=(93.272095+483202.0175233*T)*R,Om=(125.0445479-1934.1362891*T)*R,E=1-.002516*T;
+ let sl=0,sr=0,sb=0;
+ for(const t of LT){const e=t[1]?Math.pow(E,Math.abs(t[1])):1,a=t[0]*D+t[1]*M+t[2]*Mp+t[3]*F;sl+=t[4]*e*Math.sin(a);sr+=t[5]*e*Math.cos(a)}
+ for(const t of BT){const e=t[1]?Math.pow(E,Math.abs(t[1])):1;sb+=t[4]*e*Math.sin(t[0]*D+t[1]*M+t[2]*Mp+t[3]*F)}
+ const ml=(Lp+sl/1e6)*R,mb=sb/1e6*R,mr=385000.56+sr/1000;
+ const m=[mr*Math.cos(mb)*Math.cos(ml),mr*Math.cos(mb)*Math.sin(ml),mr*Math.sin(mb)];
+ const L0=280.46646+36000.76983*T,Ms=(357.52911+35999.05029*T)*R,C=((1.914602-.004817*T)*Math.sin(Ms)+.019993*Math.sin(2*Ms)+.000289*Math.sin(3*Ms))*R;
+ const ec=.016708634-.000042037*T,Rs=1.000001018*(1-ec*ec)/(1+ec*Math.cos(Ms+C))*AU,sl2=L0*R+C;
+ const s=[Rs*Math.cos(sl2),Rs*Math.sin(sl2),0];
+ const Fm=nrm(F);return{ea:sub(m,Om,Fm),sun:sub([m[0]-s[0],m[1]-s[1],m[2]-s[2]],Om,Fm),dist:mr,phase:nrm(sl2-ml)}}
+function look(f,lat,lon){const p=lat*R,q=lon*R,d=[Math.cos(f.b)*Math.cos(f.l),Math.cos(f.b)*Math.sin(f.l),Math.sin(f.b)];
+ const E=[-Math.sin(q),Math.cos(q),0],N=[-Math.sin(p)*Math.cos(q),-Math.sin(p)*Math.sin(q),Math.cos(p)],U=[Math.cos(p)*Math.cos(q),Math.cos(p)*Math.sin(q),Math.sin(p)];
+ const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+ return{el:Math.asin(Math.max(-1,Math.min(1,dot(d,U))))/R,az:(Math.atan2(dot(d,E),dot(d,N))/R+360)%360}}
+const $=id=>document.getElementById(id);
+let S={focus:0,cmp:new Set([0,2,4,9]),t0:0,days:30,mask:0,cur:0,fr:[],live:false,sites:SITES};
+const jdOf=ms=>ms/864e5+2440587.5,H=3600e3;
+function build(){const N=S.days*24;S.fr=[];for(let k=0;k<=N;k++)S.fr.push(frames(jdOf(S.t0+k*H)));$('cur').max=N;S.cur=Math.min(S.cur,N);$('cur').value=S.cur}
+const mk=(st,az)=>{const m=S.masks&&S.masks[st.n];if(!m)return S.mask;const a=((az%360)+360)%360,i=Math.floor(a),f=a-i;return m[i%360]*(1-f)+m[(i+1)%360]*f+S.mask};
+function series(st){return snap(st)||seriesA(st)}
+function snap(st){const E=S.eph;if(S.src!='jpl'||!E)return null;const d=E.sites[st.n];if(!d||d.lat!=st.lat||d.lon!=st.lon)return null;
+ const i0=Math.round((S.t0-E.start)/H),n=S.fr.length;if(i0<0||i0+n>E.hours+1)return null;
+ return S.fr.map((_,i)=>({se:d.s[i0+i][1],sa:d.s[i0+i][0],ee:d.e[i0+i][1],ea:d.e[i0+i][0]}))}
+function status(){const E=S.eph,st=S.sites[S.focus],el=$('srcs');if(S.src!='jpl'){el.textContent='Analytic engine active (about 0.1–0.2° accuracy).';return}
+ if(!E){el.textContent='No NASA snapshot found (docs/data/ephem.json). Using the analytic engine.';return}
+ const x=snap(st);if(!x){el.textContent='This site or date range is outside the NASA snapshot ('+fmtD(E.start)+' to '+fmtD(E.start+E.hours*H)+' UTC). Using the analytic engine here.';return}
+ const y=seriesA(st);let ds=0,de=0;x.forEach((p,i)=>{ds=Math.max(ds,Math.abs(p.se-y[i].se));de=Math.max(de,Math.abs(p.ee-y[i].ee))});
+ el.innerHTML='<b style="color:var(--ok)">NASA JPL Horizons</b> data (snapshot '+E.generated.slice(0,10)+'). Max difference vs analytic engine at this site: Sun '+ds.toFixed(2)+'°, Earth '+de.toFixed(2)+'°.'}
+function seriesA(st){return S.fr.map(f=>{const a=look(f.sun,st.lat,st.lon),b=look(f.ea,st.lat,st.lon);return{se:a.el,sa:a.az,ee:b.el,ea:b.az}})}
+function stats(st){const x=series(st),n=x.length;let su=0,ea=0,bo=0,nm=0,gm=0,cn=0,cg=0;
+ for(const p of x){const s=p.se+SD/R>mk(st,p.sa),e=p.ee>mk(st,p.ea);su+=s;ea+=e;bo+=s&&e;cn=s?0:cn+1;nm=Math.max(nm,cn);cg=e?0:cg+1;gm=Math.max(gm,cg)}
+ return{su:100*su/n,ea:100*ea/n,bo:100*bo/n,nm,gm,x}}
+const col=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function cv(c,h){const d=devicePixelRatio||1,w=c.clientWidth;c.width=w*d;c.height=h*d;c.style.height=h+'px';const g=c.getContext('2d');g.setTransform(d,0,0,d,0,0);g.font='11px system-ui';return[g,w,h]}
+const fmtH=h=>h>=48?(h/24).toFixed(1)+' d':h+' h';
+const fmtD=ms=>new Date(ms).toISOString().slice(5,16).replace('T',' ');
+function sky(st,x){const[g,w,h]=cv($('sky'),300),cx=w/2,cy=h/2,Rr=Math.min(w,h)/2-18,rad=el=>Rr*(30-Math.max(-10,Math.min(30,el)))/40;
+ const fg=col('--fg'),mu=col('--mut'),ln=col('--line');g.strokeStyle=ln;g.fillStyle=mu;g.textAlign='center';
+ for(const e of[-10,0,10,20,30]){g.beginPath();g.arc(cx,cy,rad(e),0,7);g.lineWidth=e==0?1.8:1;g.strokeStyle=e==0?mu:ln;g.stroke();if(e>=0&&e<30)g.fillText(e+'°',cx+3,cy-rad(e)-2)}
+ g.strokeStyle=ln;g.lineWidth=1;for(let a=0;a<360;a+=45){const X=cx-Rr*Math.sin(a*R),Y=cy-Rr*Math.cos(a*R);g.beginPath();g.moveTo(cx,cy);g.lineTo(X,Y);g.stroke()}
+ g.fillStyle=mu;[['N',0],['E',90],['S',180],['W',270]].forEach(([t,a])=>g.fillText(t,cx-(Rr+10)*Math.sin(a*R),cy-(Rr+10)*Math.cos(a*R)+4));
+ {g.beginPath();for(let a=0;a<=360;a++){const e=mk(st,a),X=cx-rad(e)*Math.sin(a*R),Y=cy-rad(e)*Math.cos(a*R);a?g.lineTo(X,Y):g.moveTo(X,Y)}g.strokeStyle=col('--bad');g.lineWidth=1.5;g.stroke();g.globalAlpha=.12;g.fillStyle=col('--bad');g.fill();g.globalAlpha=1}
+ const P=(az,el)=>[cx-rad(el)*Math.sin(az*R),cy-rad(el)*Math.cos(az*R)];
+ const tr=(k,c)=>{g.strokeStyle=c;g.globalAlpha=.45;g.lineWidth=1.3;g.beginPath();x.forEach((p,i)=>{const[X,Y]=P(p[k+'a'],p[k+'e']);i?g.lineTo(X,Y):g.moveTo(X,Y)});g.stroke();g.globalAlpha=1};
+ tr('s',col('--sun'));tr('e',col('--earth'));
+ const p=x[S.cur];const dot=(az,el,c,r,l)=>{const[X,Y]=P(az,el);g.fillStyle=c;g.globalAlpha=el<0?.4:1;g.beginPath();g.arc(X,Y,r,0,7);g.fill();g.globalAlpha=1;g.fillStyle=fg;g.textAlign='left';g.fillText(l,X+r+3,Y+4)};
+ dot(p.ea,p.ee,col('--earth'),6,'Earth');dot(p.sa,p.se,col('--sun'),8,'Sun')}
+function tl(st,x){const[g,w,h]=cv($('tl'),300),L=34,B=20,n=x.length-1,X=i=>L+(w-L-6)*i/n;
+ let lo=-4,hi=4;x.forEach(p=>{lo=Math.min(lo,p.se,p.ee);hi=Math.max(hi,p.se,p.ee)});hi*=1.08;const Y=v=>6+(h-B-6)*(hi-v)/(hi-lo);
+ g.fillStyle=col('--shade');x.forEach((p,i)=>{if(p.se+SD/R<=mk(st,p.sa))g.fillRect(X(i)-.1,6,X(1)-X(0)+.4,h-B-6)});
+ g.strokeStyle=col('--line');g.fillStyle=col('--mut');g.textAlign='right';
+ for(let v=Math.ceil(lo/5)*5;v<=hi;v+=5){g.beginPath();g.moveTo(L,Y(v));g.lineTo(w,Y(v));g.stroke();g.fillText(v+'°',L-4,Y(v)+4)}
+ g.textAlign='center';const step=Math.max(1,Math.round(S.days/6));for(let d=0;d<=S.days;d+=step){const i=d*24;g.fillText(fmtD(S.t0+i*H).slice(0,5),X(i),h-5)}
+ g.strokeStyle=col('--mut');g.beginPath();g.moveTo(L,Y(0));g.lineTo(w,Y(0));g.stroke();
+ g.setLineDash([4,3]);g.strokeStyle=col('--bad');g.lineWidth=1;g.beginPath();x.forEach((p,i)=>{const yy=Y(mk(st,p.sa));i?g.lineTo(X(i),yy):g.moveTo(X(i),yy)});g.stroke();g.setLineDash([])
+ [['se',col('--sun')],['ee',col('--earth')]].forEach(([k,c])=>{g.strokeStyle=c;g.lineWidth=1.8;g.beginPath();x.forEach((p,i)=>i?g.lineTo(X(i),Y(p[k])):g.moveTo(X(i),Y(p[k])));g.stroke()});
+ g.strokeStyle=col('--fg');g.lineWidth=1;g.beginPath();g.moveTo(X(S.cur),6);g.lineTo(X(S.cur),h-B);g.stroke()}
+function rib(){const ids=[...S.cmp].filter(i=>S.sites[i]),rh=34,[g,w]=cv($('rib'),Math.max(40,ids.length*rh+8)),L=130,n=S.fr.length;
+ ids.forEach((id,r)=>{const st=S.sites[id],x=series(st),y=r*rh+4;g.fillStyle=col('--fg');g.textAlign='left';g.fillText(st.n.slice(0,20),2,y+18);
+  const bw=(w-L)/n+.5;x.forEach((p,i)=>{const X=L+(w-L)*i/n;g.fillStyle=p.se+SD/R>mk(st,p.sa)?col('--sun'):col('--shade');g.fillRect(X,y,bw,12);g.fillStyle=p.ee>mk(st,p.ea)?col('--earth'):col('--shade');g.fillRect(X,y+14,bw,12)});
+  const X=L+(w-L)*S.cur/n;g.fillStyle=col('--fg');g.fillRect(X,y-2,1.5,30)})}
+function table(){const tb=$('tb');tb.innerHTML='';S.sites.forEach((st,i)=>{const m=stats(st),tr=document.createElement('tr');if(i==S.focus)tr.className='sel';
+ tr.innerHTML=`<td><input type="checkbox" ${S.cmp.has(i)?'checked':''} style="width:auto"></td><td>${st.n}<div class="small k">${st.lat.toFixed(2)}°, ${st.lon.toFixed(2)}°E</div></td><td class="k">${m.su.toFixed(1)}</td><td class="k">${m.ea.toFixed(1)}</td><td class="k">${m.bo.toFixed(1)}</td><td class="k">${fmtH(m.nm)}</td><td class="k">${fmtH(m.gm)}</td>`;
+ tr.querySelector('input').onclick=e=>{e.stopPropagation();e.target.checked?S.cmp.add(i):S.cmp.delete(i);rib()};
+ tr.onclick=()=>{S.focus=i;S.cmp.add(i);$('site').value=i;sync()};tb.appendChild(tr)})}
+function chips(p,st,f){const sv=p.se+SD/R>mk(st,p.sa),ev=p.ee>mk(st,p.ea),c=[];const add=(t,k)=>c.push(`<span class="chip ${k}">${t}</span>`);
+ add(`Sun ${p.se.toFixed(1)}° el · ${p.sa.toFixed(0)}° az`,sv?'ok':'bad');add(`Earth ${p.ee.toFixed(1)}° el · ${p.ea.toFixed(0)}° az`,ev?'ok':'bad');
+ add(sv?'Power: Sun up':'Power: eclipse/shadow',sv?'ok':'bad');add(ev?'DTE link possible':'No DTE (Earth below mask)',ev?'ok':'bad');
+ c.push(`<span class="chip">Sub‑Earth lib ${(f.ea.l/R).toFixed(1)}° lon, ${(f.ea.b/R).toFixed(1)}° lat</span>`,`<span class="chip">Moon distance ${Math.round(f.dist).toLocaleString()} km</span>`);$('chips').innerHTML=c.join('')}
+function drawFocus(){const st=S.sites[S.focus],x=series(st);$('ftitle').textContent=`${st.n} (${st.lat.toFixed(2)}°, ${st.lon.toFixed(2)}°E)`;
+ sky(st,x);tl(st,x);chips(x[S.cur],st,S.fr[S.cur]);$('curl').textContent=fmtD(S.t0+S.cur*H)+' UTC'}
+function sync(){drawFocus();rib();table();status()}
+function setT0(ms){S.t0=Math.floor(ms/H)*H;$('t0').value=new Date(S.t0).toISOString().slice(0,16);build();sync()}
+const ss=$('site');S.sites.forEach((s,i)=>ss.add(new Option(s.n,i)));
+ss.onchange=()=>{S.focus=+ss.value;S.cmp.add(S.focus);$('lat').value=S.sites[S.focus].lat;$('lon').value=S.sites[S.focus].lon;sync()};
+$('addc').onclick=()=>{const la=+$('lat').value,lo=+$('lon').value;if(isNaN(la)||isNaN(lo)||Math.abs(la)>90)return;
+ let i=S.sites.findIndex(s=>s.n=='Custom');if(i<0){S.sites.push({n:'Custom'});i=S.sites.length-1;ss.add(new Option('Custom',i))}
+ Object.assign(S.sites[i],{lat:la,lon:((lo+180)%360+360)%360-180});S.focus=i;S.cmp.add(i);ss.value=i;sync()};
+$('src').onchange=e=>{S.src=e.target.value;if(S.src!='jpl')$('srcs').textContent='Analytic engine active.';sync()};
+$('mask').oninput=e=>{S.mask=+e.target.value;$('mv').textContent=S.mask;sync()};
+$('days').oninput=e=>{S.days=+e.target.value;$('dv').textContent=S.days;build();sync()};
+$('t0').onchange=e=>{const v=Date.parse(e.target.value+':00Z');if(!isNaN(v))setT0(v)};
+$('cur').oninput=e=>{S.cur=+e.target.value;drawFocus();rib()};
+$('now').onclick=()=>{setT0(Date.now());S.cur=0;$('cur').value=0;drawFocus()};
+let timer;$('live').onclick=e=>{S.live=!S.live;e.target.classList.toggle('on',S.live);clearInterval(timer);if(S.live){$('now').click();timer=setInterval(()=>$('now').click(),30000)}};
+$('tl').onclick=e=>{const r=e.target.getBoundingClientRect(),n=S.fr.length-1,i=Math.round((e.clientX-r.left-34)/(r.width-40)*n);S.cur=Math.max(0,Math.min(n,i));$('cur').value=S.cur;drawFocus();rib()};
+addEventListener('resize',()=>sync());matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>sync());
+$('lat').value=SITES[0].lat;$('lon').value=SITES[0].lon;setT0(Date.now());
+fetch('data/ephem.json').then(r=>r.ok&&r.json()).then(j=>{if(j&&j.sites){S.eph=j;S.src='jpl';$('src').value='jpl';setT0(Math.max(j.start,Math.min(Date.now(),j.start+(j.hours-S.days*24)*H)))}}).catch(()=>{});
+fetch('data/masks.json').then(r=>r.ok&&r.json()).then(j=>{if(j&&j.masks){S.masks=j.masks;$('tms').innerHTML='<b style="color:var(--ok)">Terrain horizons: '+j.source+'</b> (out to '+j.radius_km+' km, '+j.observer_height_m+' m mast).';sync()}}).catch(()=>{});
+</script></body></html>

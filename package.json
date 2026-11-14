@@ -1,0 +1,1 @@
+{ "name": "lunar-south-pole-planner", "version": "2.0.0", "private": true, "scripts": { "fetch": "node tools/fetch-horizons.js 120" } }
